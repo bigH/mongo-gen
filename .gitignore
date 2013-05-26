@@ -1,5 +1,13 @@
-*.class
+# intellij
+.idea/
+.idea_modules/
+
+# general
+.DS_Store
 *.log
+
+# jvm
+*.class
 
 # sbt specific
 dist/*
@@ -8,6 +16,3 @@ lib_managed/
 src_managed/
 project/boot/
 project/plugins/project/
-
-# Scala-IDE specific
-.scala_dependencies
