@@ -1,0 +1,307 @@
+MongoGen framework
+------------------
+
+This framework can generate:
+ - DAO/DB code
+
+Mongo
+-----
+Need to be able to generate:
+ - case classes
+ - dao objects
+ - translation utilities
+ - metadata
+
+Nice to haves:
+ - query api - allowing for criteria style DSL'd queries
+ - ?
+
+--- input ---
+
+package com.zensey.domain.live_feed
+
+
+mongo query object Profiles {
+  // config??
+}
+
+mongo collection ProfileCollection {
+  // config??
+}
+
+primary base entity Goal {
+  participantType: String
+  membershipType: String
+}
+
+primary entity SomeGoal {
+  participantType: String
+  membershipType: String
+}
+
+
+--- input ---
+
+package com.zensey.domain.live_feed
+
+
+mongo query object Profiles {
+  @deprecated def collection = ....
+  // config??
+}
+
+mongo collection ProfileCollection {
+  // config??
+}
+
+primary entity LiFO {
+  type: String
+  action: String
+  (type, action) match {
+    case .. => subentity SpecialLiveFeedObject {
+      data: SpecialType
+    }
+    case .. => subentity OtherLiveFeedObject {
+      data: OtherType
+    }
+  }
+}
+
+--- input ---
+
+package com.zensey.domain.profile
+
+mongo query object Profiles {
+  // config??
+}
+
+mongo collection ProfileCollection {
+  // config??
+}
+
+primary entity Profile {
+  // id: String -- implicitly created for all entities
+  name: String (unique)
+  blurb: Option[String]
+  address: Address
+  permissions: List[String]
+  preferences: UserPrefs
+  attributes: Map[String, _]
+}
+
+entity UserPrefs {
+  // include parent_id -- implicitly added
+  pref: String
+  otherPref: String
+}
+
+entity Address {
+  // include parent_id -- implicitly added
+  street: Option[String]
+  streetAdditional: Option[String]
+  city: String
+  state: String
+  zip: Option[String]
+}
+
+view Basic* of Address { // becomes BasicAddress
+  // include parent_id -- implicitly added
+  include city, state
+}
+
+view Tiny* of Profile { // becomes TinyProfile
+  // include id -- implicitly added
+  include name, address { // becomes TinyAddress
+    // include parent_id -- implicitly added
+    include state
+  }
+}
+
+view Mini* of Profile { // becomes MiniProfile
+  // include id -- implicitly added
+  include name, address (as BasicAddress)
+}
+
+--- pojos ---
+
+package com.zensey.domain.profile.model
+
+case class Profile, Address, UserPrefs, BasicAddress, TinyProfile, TinyAddress, MiniProfile, MinimalAddress, MinimalProfile
+
+--- agr ---
+
+Profiles.group {
+}.sort {
+}.group {
+}
+
+
+--- queries ---
+
+import com.zensey.domain.profile.query.Profile
+import Profile.{fields => f}
+import Profile.{projections => p}
+
+Profiles.having (implicit QueryDecorator) (
+  f.address.city matches "Alb[ae][cquerqie]*(ie|y)",
+  f.permissions contains "someAdmin"
+).find ( // results in a List[TinyProfile]
+  p.TinyProfile
+).future // causes the production of a future
+
+Profiles.having (
+  f.address.city === "Springfield",
+  f.address.state in (
+    "VA", "NY", ...
+  )
+).findOne ( // results in an Option[TinyProfile]
+  p.TinyProfile
+).perform // synchronous call
+
+--- inserts ---
+
+Profiles create ( // batch create
+  profile1,
+  profile2,
+  ....
+)
+
+Profiles create profile
+Profiles create minimalProfile
+Profiles create miniProfile
+Profiles create tinyProfile // should not work as tiny profile doesn't include the needed fields.
+
+--- updates ---
+
+import com.zensey.domain.profile.query.Profile.{fields => f}
+
+Profiles.having (
+  f.address.city === "Bombay"
+).updateFunction ((profile: Profile) => { // create a new POJO entirely
+  profile.copy(address = profile.address.copy(city = "Mumbai"))
+}).perform // do it immediately
+
+Profiles.having (
+  f.address.city === "Bombay"
+  f.address.state === "MA"
+).update (
+  f.address.city = "Mumbai"
+).requireUpdates // do it immediately and throw an exception in case any objects don't get updated
+
+Profiles.having (
+  f.username === currentUsername
+).update (
+  f.loginCount.increment
+).requireUpdates // do it immediately and throw an exception in case any objects don't get updated
+
+// potentially expensive, but easy for small sets
+// may even be implemented as a batch update
+Profiles.having (
+  f.address.city matches "^[a-z]"
+).update (
+  f.address.city transform ((profile: Profile) => profile.address.city.capitalize)
+).future // update is provided as a future
+
+Profiles.having (
+  f.address.city === "Bombay"
+  f.address.state === "MA"
+).modify ( // what happens to the update result here???
+  f.address.city = "Mumbai"
+).find (
+  p.MiniProfile
+)
+
+--- deletes ---
+
+Profiles.having (
+  ...
+).delete.perform
+
+Profiles.having (
+  ...
+).delete.future
+
+--- Enhancements ---
+
+Profiles ( givenProfile )
+
+// same as
+
+Profiles.having (
+  f.id === givenProfile.id
+)
+
+// OR 
+
+Profiles ( 
+  givenProfile, 
+  anotherGivenProfile 
+).find (
+  p.MiniProfile
+).perform
+
+// same as
+
+Profiles.having (
+  f.id in (
+    givenProfile.id,
+    anotherGivenProfile.id
+  )
+)
+
+// this is a nice possible variation that could support upserts -- as there is greater certainty of more fields being included.
+
+--- joiny queries ---
+
+val participationFuture = 
+  GoalParticipants.having (
+    pf.username === user.username
+  ).find (
+    pp.GoalParticipant
+  ).future
+
+def goalFuture(id: String) = 
+  Goals.having (
+    gf.id === id
+  ).find (
+    gp.Goal
+  ).future
+
+val amalgamation = for {
+  participation <- participationFuture
+  goal <- goalFuture(participation.goalId)
+} yield GoalAndParticipation(goal, participation)
+
+amalgamation.get
+
+--- other stuff ---
+
+import com.zensey.domain.profile.transform._
+
+Profile.to*
+Profile.fromJson
+Profile.fromJsonString
+Profile.fromDBObject
+
+MiniProfile.*
+
+TinyProfile.*
+
+Address.*
+
+BasicAddress.*
+
+----- notes -----
+ - how to handle permissions/acl -- implicit QueryDecorator?
+ - how to handle migrations ?? --
+ - how to handle atomic operations?
+ -- different types of objects in the collection??
+   - live feed types
+   - goals
+   - checkins
+ - aggregation framework
+ - default values
+ - debugging?
+ - what other cross-cutting concerns?
+ - how to handle multiple projections based on client and/or permissions
+ - 

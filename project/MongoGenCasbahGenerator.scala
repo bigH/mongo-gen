@@ -1,4 +1,6 @@
+import sbt._
 import Libraries._
+import Modules._
 
 object MongoGenCasbahGenerator extends BaseModule {
   val moduleName = "mongo-gen-casbah-generator"
@@ -6,7 +8,7 @@ object MongoGenCasbahGenerator extends BaseModule {
 
   val settings = Seq ()
 
-  def project = baseProject
+  def project = baseProject dependsOn (mgGeneratorApi)
 
   lazy val libraries = Seq ()
 }

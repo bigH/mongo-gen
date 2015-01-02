@@ -9,9 +9,11 @@ class VerifiersModule extends AbstractModule {
 
   def configure() {
     val uriBinder = Multibinder.newSetBinder(binder(), classOf[Verifier])
+
     uriBinder.addBinding().to(classOf[RequiredStatement])
     uriBinder.addBinding().to(classOf[FieldNameUniqueness])
     uriBinder.addBinding().to(classOf[ViewMappingValidness])
     uriBinder.addBinding().to(classOf[EntityClassName])
+    uriBinder.addBinding().to(classOf[EntityTree])
   }
 }
